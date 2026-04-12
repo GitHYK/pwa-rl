@@ -272,15 +272,13 @@ body {
 
 /* ── Line Entry ── */
 .le {
-  flex: 1;
-  min-height: 0;
+  flex-shrink: 0;
   padding: 12px 24px 12px 0;
   display: flex;
   align-items: flex-start;
   gap: 0;
   border-bottom: 1px solid var(--border);
   position: relative;
-  overflow: hidden;
 }
 
 .le:last-child { border-bottom: none; }
@@ -588,13 +586,33 @@ function lineHTML(i, isCur) {
     </div>`;
 }
 
+function buildLines(idx, count) {
+  // current 위치: count=4→2번째(idx-2), count=3→1번째(idx-1), count=2→0번째(idx)
+  const curPos = Math.max(0, count - 2);
+  const start  = idx - curPos;
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += lineHTML(start + i, start + i === idx);
+  }
+  return html;
+}
+
 function renderVisible(idx, dir) {
-  const track = document.getElementById('track');
-  track.innerHTML =
-    lineHTML(idx - 2, false) +
-    lineHTML(idx - 1, false) +
-    lineHTML(idx,     true)  +
-    lineHTML(idx + 1, false);
+  const track    = document.getElementById('track');
+  const viewport = track.parentElement;
+  const availH   = viewport.clientHeight;
+
+  // 4줄 → 3줄 → 2줄 순으로 시도, 내용이 들어맞으면 확정
+  let chosenCount = 2;
+  for (let count = 4; count >= 2; count--) {
+    track.innerHTML = buildLines(idx, count);
+    if (track.scrollHeight <= availH) {
+      chosenCount = count;
+      break;
+    }
+  }
+
+  // 여전히 안 맞으면 2줄로 고정 (이미 렌더됨)
   track.classList.remove('anim-up', 'anim-down');
   void track.offsetWidth;
   if (dir === 'up')   track.classList.add('anim-up');
