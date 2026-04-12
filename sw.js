@@ -1,4 +1,4 @@
-const CACHE_NAME = 'reading-lines-v1';
+const CACHE_NAME = 'reading-lines-v2';
 
 const PRECACHE = [
   './index.html',
