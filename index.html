@@ -32,8 +32,6 @@
   --accent:    #b8924a;
   --accent2:   #d4aa6a;
   --dim:       #1e2a3a;
-  --line-h:    170px;
-  --stage-lines: 4;
 }
 
 body {
@@ -248,33 +246,44 @@ body {
 
 .viewport {
   position: absolute;
-  left: 0; right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  height: calc(var(--line-h) * 4);
-  overflow: hidden;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes snapUp {
+  from { opacity: 0.3; transform: translateY(12px); }
+  to   { opacity: 1;   transform: translateY(0); }
+}
+@keyframes snapDown {
+  from { opacity: 0.3; transform: translateY(-12px); }
+  to   { opacity: 1;   transform: translateY(0); }
 }
 
 .track {
-  position: absolute;
-  left: 0; right: 0;
-  top: 0;
-  will-change: transform;
-  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
 }
+
+.track.anim-up   { animation: snapUp   0.28s cubic-bezier(0.4,0,0.2,1); }
+.track.anim-down { animation: snapDown 0.28s cubic-bezier(0.4,0,0.2,1); }
 
 /* ── Line Entry ── */
 .le {
-  height: var(--line-h);
-  padding: 18px 64px 18px 0;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 24px 12px 0;
   display: flex;
   align-items: flex-start;
   gap: 0;
-  border-bottom: 1px solid transparent;
-  transition: border-color 0.2s;
+  border-bottom: 1px solid var(--border);
   position: relative;
   overflow: hidden;
 }
+
+.le:last-child { border-bottom: none; }
 
 .le-bar {
   flex-shrink: 0;
@@ -307,37 +316,31 @@ body {
 
 .le-en {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 400;
   color: var(--en);
   line-height: 1.35;
-  margin-bottom: 9px;
+  margin-bottom: 6px;
   transition: color 0.3s, font-size 0.3s;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  word-break: break-word;
 }
 
 .le-trs {
   display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .le-ko {
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 6px;
   font-size: 12px;
   color: var(--ko);
   line-height: 1.5;
   transition: color 0.3s;
-  max-width: 48%;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  word-break: break-word;
+  flex-wrap: wrap;
 }
 
 .ko-tag {
@@ -353,9 +356,12 @@ body {
 /* ── Current line state ── */
 .le.cur .le-bar    { background: var(--accent); }
 .le.cur .le-ts     { color: var(--ts-cur); }
-.le.cur .le-en     { color: var(--en-cur); font-size: 30px; }
-.le.cur .le-ko     { color: var(--ko-cur); -webkit-line-clamp: unset; display: flex; }
+.le.cur .le-en     { color: var(--en-cur); font-size: 26px; }
+.le.cur .le-ko     { color: var(--ko-cur); }
 .le.cur .ko-tag    { color: var(--accent); }
+
+/* ── Dim non-current lines ── */
+.le.dim { opacity: 0.45; }
 
 /* ── Controls ── */
 .controls {
@@ -559,18 +565,42 @@ let raf        = null;
 let dragging   = false;
 let speed      = 1;
 
-const LINE_H   = 170;   // px — must match CSS --line-h
-const PAD_SLOTS = 2;    // empty spacer slots at start & end
-
 /* ─────────────────────────────────────────────
-   TIME PARSING
+   RENDER TRACK
 ───────────────────────────────────────────── */
-function parseTime(v) {
-  if (v === null || v === undefined || v === '') return 0;
-  if (typeof v === 'number') {
-    if (v > 0 && v < 1) return v * 86400; // Excel fractional day
-    return v;
-  }
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function lineHTML(i, isCur) {
+  if (i < 0 || i >= rows.length) return '<div class="le"></div>';
+  const r = rows[i];
+  return `<div class="le${isCur ? ' cur' : ' dim'}">
+      <div class="le-bar"></div>
+      <div class="le-ts">${fmt(r.time)}</div>
+      <div class="le-body">
+        <div class="le-en">${esc(r.english)}</div>
+        <div class="le-trs">
+          <div class="le-ko"><span class="ko-tag">인간&nbsp;</span>${esc(r.human)}</div>
+          <div class="le-ko"><span class="ko-tag">기계&nbsp;</span>${esc(r.machine)}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderVisible(idx, dir) {
+  const track = document.getElementById('track');
+  track.innerHTML =
+    lineHTML(idx - 2, false) +
+    lineHTML(idx - 1, false) +
+    lineHTML(idx,     true)  +
+    lineHTML(idx + 1, false);
+  track.classList.remove('anim-up', 'anim-down');
+  void track.offsetWidth;
+  if (dir === 'up')   track.classList.add('anim-up');
+  if (dir === 'down') track.classList.add('anim-down');
+}
+
   const s = String(v).trim();
   const p = s.split(':');
   if (p.length === 3) return +p[0] * 3600 + +p[1] * 60 + parseFloat(p[2]);
@@ -639,42 +669,12 @@ function load(file) {
       slider.max = totalDur;
       slider.value = 0;
 
-      buildTrack();
       initPlayer();
     } catch(e) {
       alert('파일을 읽는 중 오류가 발생했습니다: ' + e.message);
     }
   };
   reader.readAsArrayBuffer(file);
-}
-
-/* ─────────────────────────────────────────────
-   RENDER TRACK
-───────────────────────────────────────────── */
-function esc(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function buildTrack() {
-  const track = document.getElementById('track');
-
-  // Spacer slots
-  const spacer = (n) => Array(n).fill(`<div style="height:${LINE_H}px"></div>`).join('');
-
-  track.innerHTML = spacer(PAD_SLOTS)
-    + rows.map((r, i) => `
-      <div class="le" id="le-${i}">
-        <div class="le-bar"></div>
-        <div class="le-ts">${fmt(r.time)}</div>
-        <div class="le-body">
-          <div class="le-en">${esc(r.english)}</div>
-          <div class="le-trs">
-            <div class="le-ko"><span class="ko-tag">인간&nbsp;</span>${esc(r.human)}</div>
-            <div class="le-ko"><span class="ko-tag">기계&nbsp;</span>${esc(r.machine)}</div>
-          </div>
-        </div>
-      </div>`).join('')
-    + spacer(PAD_SLOTS);
 }
 
 /* ─────────────────────────────────────────────
@@ -690,6 +690,7 @@ function curIdx() {
 
 function initPlayer() {
   curTime = rows[0].time;
+  prevCurIdx = -1;
   playing = true;
   lastTs  = performance.now();
 
@@ -700,8 +701,6 @@ function initPlayer() {
   if (raf) cancelAnimationFrame(raf);
   loop();
 }
-
-let prevCurIdx = -1;
 
 function loop() {
   raf = requestAnimationFrame(ts => {
@@ -716,35 +715,15 @@ function loop() {
   });
 }
 
-/* Calculate stage center offset so 2nd slot (index 1) sits at stage center */
-function getStageOffset() {
-  const stage = document.getElementById('stage');
-  const stagH = stage.offsetHeight;
-  // We want slot at (PAD_SLOTS + lineIdx) to appear at "1st visible position"
-  // Let's center the viewport so current line is at 1/4 from top of stage
-  const targetY = stagH * 0.25; // 25% from top = "focus zone"
-  return targetY - LINE_H * 0.5;
-}
+let prevCurIdx = -1;
 
 function render() {
   const idx = curIdx();
-
-  // Current line always at 3rd visible row (0-indexed = 2)
-  // PAD_SLOTS=2, so slot of line[idx] = PAD_SLOTS + idx
-  // We want that slot at viewport row 2 → ty = (PAD_SLOTS + idx - 2) * LINE_H = idx * LINE_H
-  const ty = idx * LINE_H;
-  document.getElementById('track').style.transform = `translateY(${-ty}px)`;
-
-  // Current line class
-  if (prevCurIdx !== idx) {
-    const old = document.getElementById(`le-${prevCurIdx}`);
-    if (old) old.classList.remove('cur');
-    const cur = document.getElementById(`le-${idx}`);
-    if (cur) cur.classList.add('cur');
+  if (idx !== prevCurIdx) {
+    const dir = idx > prevCurIdx ? 'up' : 'down';
+    renderVisible(idx, prevCurIdx === -1 ? null : dir);
     prevCurIdx = idx;
   }
-
-  // Slider & time
   if (!dragging) document.getElementById('slider').value = curTime;
   document.getElementById('t-cur').textContent = fmt(curTime);
 }
@@ -767,6 +746,7 @@ document.getElementById('btn-prev').addEventListener('click', () => {
   const prev = Math.max(0, idx - 1);
   curTime = rows[prev].time;
   lastTs  = performance.now();
+  prevCurIdx = -1; // force re-render
 });
 
 document.getElementById('btn-next').addEventListener('click', () => {
@@ -774,6 +754,7 @@ document.getElementById('btn-next').addEventListener('click', () => {
   const next = Math.min(rows.length - 1, idx + 1);
   curTime = rows[next].time;
   lastTs  = performance.now();
+  prevCurIdx = -1; // force re-render
 });
 
 document.getElementById('btn-done').addEventListener('click', () => {
@@ -821,5 +802,3 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-</body>
-</html>
