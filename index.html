@@ -273,7 +273,7 @@ body {
 /* ── Line Entry ── */
 .le {
   flex-shrink: 0;
-  padding: 12px 24px 12px 0;
+  padding: 8px 16px 8px 0;
   display: flex;
   align-items: flex-start;
   gap: 0;
@@ -314,11 +314,11 @@ body {
 
 .le-en {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 400;
   color: var(--en);
   line-height: 1.35;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   transition: color 0.3s, font-size 0.3s;
   word-break: break-word;
 }
@@ -354,7 +354,7 @@ body {
 /* ── Current line state ── */
 .le.cur .le-bar    { background: var(--accent); }
 .le.cur .le-ts     { color: var(--ts-cur); }
-.le.cur .le-en     { color: var(--en-cur); font-size: 26px; }
+.le.cur .le-en     { color: var(--en-cur); font-size: 22px; }
 .le.cur .le-ko     { color: var(--ko-cur); }
 .le.cur .ko-tag    { color: var(--accent); }
 
@@ -597,22 +597,37 @@ function buildLines(idx, count) {
   return html;
 }
 
+function measureHeight(html, refEl) {
+  // 임시 클론으로 실제 콘텐츠 높이 측정 (height:auto)
+  const temp = document.createElement('div');
+  temp.style.cssText =
+    'position:fixed;top:-9999px;left:0;' +
+    'width:' + refEl.clientWidth + 'px;' +
+    'display:flex;flex-direction:column;visibility:hidden;pointer-events:none;';
+  temp.innerHTML = html;
+  document.body.appendChild(temp);
+  const h = temp.scrollHeight;
+  document.body.removeChild(temp);
+  return h;
+}
+
 function renderVisible(idx, dir) {
   const track    = document.getElementById('track');
   const viewport = track.parentElement;
   const availH   = viewport.clientHeight;
 
-  // 4줄 → 3줄 → 2줄 순으로 시도, 내용이 들어맞으면 확정
-  let chosenCount = 2;
+  // 4줄 → 3줄 → 2줄 순으로 시도, 실제 높이가 맞으면 확정
+  let finalHtml = buildLines(idx, 2); // 기본값
   for (let count = 4; count >= 2; count--) {
-    track.innerHTML = buildLines(idx, count);
-    if (track.scrollHeight <= availH) {
-      chosenCount = count;
+    const html = buildLines(idx, count);
+    const h    = measureHeight(html, viewport);
+    if (h <= availH || count === 2) {
+      finalHtml = html;
       break;
     }
   }
 
-  // 여전히 안 맞으면 2줄로 고정 (이미 렌더됨)
+  track.innerHTML = finalHtml;
   track.classList.remove('anim-up', 'anim-down');
   void track.offsetWidth;
   if (dir === 'up')   track.classList.add('anim-up');
