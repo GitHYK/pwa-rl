@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reading Lines</title>
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Reading Lines">
+<meta name="theme-color" content="#07090e">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #07090e;
+  --surface:   #0c1018;
+  --border:    #181f2e;
+  --border2:   #222d40;
+  --en:        #ddd0b8;
+  --en-cur:    #f5ead8;
+  --ko:        #6a7d96;
+  --ko-cur:    #8fa3bc;
+  --ts:        #2e3f56;
+  --ts-cur:    #4a6680;
+  --accent:    #b8924a;
+  --accent2:   #d4aa6a;
+  --dim:       #1e2a3a;
+  --line-h:    170px;
+  --stage-lines: 4;
+}
+
+body {
+  background: var(--bg);
+  color: var(--en);
+  font-family: 'Noto Sans KR', sans-serif;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ══════════════════════════════════════════
+   SCREEN 1 – WELCOME
+══════════════════════════════════════════ */
+#scr-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 52px;
+  animation: fadeUp 0.8s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(20px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+.logo-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-dash {
+  width: 40px;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+.logo-sub {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.45em;
+  color: var(--ts);
+  text-transform: uppercase;
+}
+
+.logo-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 72px;
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--en);
+}
+
+.logo-title em {
+  font-style: italic;
+  color: var(--accent2);
+}
+
+.drop-zone {
+  position: relative;
+  width: 420px;
+  height: 210px;
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+  overflow: hidden;
+}
+
+.drop-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(184,146,74,0.08) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.drop-zone:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 40px rgba(184,146,74,0.08);
+}
+
+.drop-zone:hover::before { opacity: 1; }
+
+.drop-zone input[type=file] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 0;
+}
+
+.drop-icon {
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 20px;
+  transition: border-color 0.25s;
+}
+
+.drop-zone:hover .drop-icon { border-color: var(--accent); }
+
+.drop-text {
+  font-size: 14px;
+  color: var(--ko);
+  letter-spacing: 0.02em;
+}
+
+.drop-hint {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--ts);
+  letter-spacing: 0.08em;
+}
+
+.drop-zone.drag-over {
+  border-color: var(--accent2);
+  background: rgba(184,146,74,0.06);
+}
+
+/* ══════════════════════════════════════════
+   SCREEN 2 – PLAYER
+══════════════════════════════════════════ */
+#scr-player {
+  display: none;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ── Header ── */
+.ph {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 48px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ph-logo {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  font-weight: 300;
+  letter-spacing: 0.25em;
+  color: var(--accent);
+}
+
+.ph-logo span { color: var(--en); opacity: 0.4; }
+
+.ph-file {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--ts-cur);
+  letter-spacing: 0.05em;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Stage ── */
+.stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* fade masks */
+.stage::before,
+.stage::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+.stage::before {
+  top: 0; height: 120px;
+  background: linear-gradient(to bottom, var(--bg) 0%, transparent 100%);
+}
+.stage::after {
+  bottom: 0; height: 120px;
+  background: linear-gradient(to top, var(--bg) 0%, transparent 100%);
+}
+
+.viewport {
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: calc(var(--line-h) * 4);
+  overflow: hidden;
+}
+
+.track {
+  position: absolute;
+  left: 0; right: 0;
+  top: 0;
+  will-change: transform;
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Line Entry ── */
+.le {
+  height: var(--line-h);
+  padding: 18px 64px 18px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.le-bar {
+  flex-shrink: 0;
+  width: 3px;
+  height: 100%;
+  margin-right: 20px;
+  background: transparent;
+  transition: background 0.3s;
+  align-self: stretch;
+  border-radius: 0 2px 2px 0;
+}
+
+.le-ts {
+  flex-shrink: 0;
+  width: 56px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--ts);
+  padding-top: 8px;
+  letter-spacing: 0.06em;
+  transition: color 0.3s;
+  text-align: right;
+  margin-right: 20px;
+}
+
+.le-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.le-en {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--en);
+  line-height: 1.35;
+  margin-bottom: 9px;
+  transition: color 0.3s, font-size 0.3s;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.le-trs {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.le-ko {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ko);
+  line-height: 1.5;
+  transition: color 0.3s;
+  max-width: 48%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.ko-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--ts);
+  flex-shrink: 0;
+  transition: color 0.3s;
+  display: inline;
+}
+
+/* ── Current line state ── */
+.le.cur .le-bar    { background: var(--accent); }
+.le.cur .le-ts     { color: var(--ts-cur); }
+.le.cur .le-en     { color: var(--en-cur); font-size: 30px; }
+.le.cur .le-ko     { color: var(--ko-cur); -webkit-line-clamp: unset; display: flex; }
+.le.cur .ko-tag    { color: var(--accent); }
+
+/* ── Controls ── */
+.controls {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 14px 48px 20px;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.t-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--ko);
+  min-width: 38px;
+  letter-spacing: 0.04em;
+}
+
+.t-label.right { text-align: right; }
+
+input[type=range] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 2px;
+  background: var(--border2);
+  border-radius: 1px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent2);
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(184,146,74,0);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+input[type=range]:hover::-webkit-slider-thumb,
+input[type=range]:active::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(184,146,74,0.18);
+  transform: scale(1.15);
+}
+
+.btn-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.btn {
+  padding: 8px 26px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--ko);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 13px;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+.btn-play {
+  border-color: var(--accent);
+  color: var(--accent2);
+  padding: 8px 44px;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  min-width: 130px;
+  text-align: center;
+}
+
+.btn-play:hover {
+  background: rgba(184,146,74,0.08);
+}
+
+.btn-done {
+  color: var(--ts-cur);
+  border-color: var(--border);
+}
+
+.btn-done:hover { border-color: #a04040; color: #c05050; }
+
+/* ── Speed Controls ── */
+.speed-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.btn-speed {
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border2);
+  color: var(--ts-cur);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+
+.btn-speed:last-child { border-right: none; }
+.btn-speed:hover { background: rgba(184,146,74,0.08); color: var(--accent2); }
+
+.btn-speed.active {
+  background: rgba(184,146,74,0.15);
+  color: var(--accent2);
+}
+</style>
+</head>
+
+<body>
+
+<!-- ──────────── SCREEN 1: WELCOME ──────────── -->
+<div id="scr-welcome">
+
+  <div class="logo-block">
+    <div class="logo-line">
+      <div class="logo-dash"></div>
+      <div class="logo-sub">Script Synchronized Reader</div>
+      <div class="logo-dash"></div>
+    </div>
+    <div class="logo-title">Reading <em>Lines</em></div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div class="drop-icon">📄</div>
+    <div class="drop-text">엑셀 파일을 선택하거나 드롭하세요</div>
+    <div class="drop-hint">.xlsx &nbsp;/&nbsp; .xls &nbsp;·&nbsp; 시간 · 영어 · 사람번역 · 기계번역</div>
+  </div>
+
+</div>
+
+<!-- ──────────── SCREEN 2: PLAYER ──────────── -->
+<div id="scr-player">
+
+  <header class="ph">
+    <div class="ph-logo">R<span>/</span>L</div>
+    <div class="ph-file" id="ph-file">—</div>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="viewport">
+      <div class="track" id="track"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="slider-row">
+      <span class="t-label" id="t-cur">0:00</span>
+      <input type="range" id="slider" min="0" max="100" value="0" step="0.01">
+      <span class="t-label right" id="t-total">0:00</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="btn-prev">◀&nbsp; 이전</button>
+      <button class="btn" id="btn-next">다음&nbsp;▶</button>
+      <button class="btn btn-play" id="btn-play">일시정지</button>
+      <button class="btn btn-done" id="btn-done">완료</button>
+      <div class="speed-group" id="speed-group">
+        <button class="btn-speed active" data-speed="1">1×</button>
+        <button class="btn-speed" data-speed="1.5">1.5×</button>
+        <button class="btn-speed" data-speed="2">2×</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ─────────────────────────────────────────────
+   STATE
+───────────────────────────────────────────── */
+let rows       = [];   // [{time, english, human, machine}]
+let totalDur   = 0;
+let curTime    = 0;
+let playing    = false;
+let lastTs     = null;
+let raf        = null;
+let dragging   = false;
+let speed      = 1;
+
+const LINE_H   = 170;   // px — must match CSS --line-h
+const PAD_SLOTS = 2;    // empty spacer slots at start & end
+
+/* ─────────────────────────────────────────────
+   TIME PARSING
+───────────────────────────────────────────── */
+function parseTime(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') {
+    if (v > 0 && v < 1) return v * 86400; // Excel fractional day
+    return v;
+  }
+  const s = String(v).trim();
+  const p = s.split(':');
+  if (p.length === 3) return +p[0] * 3600 + +p[1] * 60 + parseFloat(p[2]);
+  if (p.length === 2) return +p[0] * 60 + parseFloat(p[1]);
+  return parseFloat(s) || 0;
+}
+
+function fmt(sec) {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/* ─────────────────────────────────────────────
+   FILE LOADING
+───────────────────────────────────────────── */
+document.getElementById('fileInput').addEventListener('change', e => {
+  const f = e.target.files[0]; if (f) load(f);
+});
+
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0]; if (f) load(f);
+});
+
+function load(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (raw.length < 2) { alert('데이터가 없습니다.'); return; }
+
+      // Detect column indices
+      const hdr = raw[0].map(h => String(h).trim());
+      const fi = (kws) => {
+        const i = hdr.findIndex(h => kws.some(k => h.includes(k)));
+        return i >= 0 ? i : null;
+      };
+      const ti = fi(['시간','time','Time']) ?? 0;
+      const ei = fi(['영어','English','english','en']) ?? 1;
+      const hi = fi(['사람','인간','human','Human']) ?? 2;
+      const mi = fi(['기계','machine','Machine']) ?? 3;
+
+      rows = raw.slice(1)
+        .map(r => ({
+          time:    parseTime(r[ti]),
+          english: String(r[ei] || '').trim(),
+          human:   String(r[hi] || '').trim(),
+          machine: String(r[mi] || '').trim(),
+        }))
+        .filter(r => r.english !== '');
+
+      if (!rows.length) { alert('유효한 데이터를 찾을 수 없습니다.'); return; }
+      rows.sort((a, b) => a.time - b.time);
+
+      totalDur = rows[rows.length - 1].time + 6;
+
+      document.getElementById('ph-file').textContent = file.name;
+      document.getElementById('t-total').textContent = fmt(totalDur);
+      const slider = document.getElementById('slider');
+      slider.max = totalDur;
+      slider.value = 0;
+
+      buildTrack();
+      initPlayer();
+    } catch(e) {
+      alert('파일을 읽는 중 오류가 발생했습니다: ' + e.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ─────────────────────────────────────────────
+   RENDER TRACK
+───────────────────────────────────────────── */
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function buildTrack() {
+  const track = document.getElementById('track');
+
+  // Spacer slots
+  const spacer = (n) => Array(n).fill(`<div style="height:${LINE_H}px"></div>`).join('');
+
+  track.innerHTML = spacer(PAD_SLOTS)
+    + rows.map((r, i) => `
+      <div class="le" id="le-${i}">
+        <div class="le-bar"></div>
+        <div class="le-ts">${fmt(r.time)}</div>
+        <div class="le-body">
+          <div class="le-en">${esc(r.english)}</div>
+          <div class="le-trs">
+            <div class="le-ko"><span class="ko-tag">인간&nbsp;</span>${esc(r.human)}</div>
+            <div class="le-ko"><span class="ko-tag">기계&nbsp;</span>${esc(r.machine)}</div>
+          </div>
+        </div>
+      </div>`).join('')
+    + spacer(PAD_SLOTS);
+}
+
+/* ─────────────────────────────────────────────
+   PLAYER
+───────────────────────────────────────────── */
+function curIdx() {
+  let idx = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].time <= curTime) idx = i; else break;
+  }
+  return idx;
+}
+
+function initPlayer() {
+  curTime = rows[0].time;
+  playing = true;
+  lastTs  = performance.now();
+
+  document.getElementById('scr-welcome').style.display = 'none';
+  document.getElementById('scr-player').style.display  = 'flex';
+
+  updateBtn();
+  if (raf) cancelAnimationFrame(raf);
+  loop();
+}
+
+let prevCurIdx = -1;
+
+function loop() {
+  raf = requestAnimationFrame(ts => {
+    if (playing && !dragging) {
+      const dt = (ts - lastTs) / 1000;
+      curTime = Math.min(curTime + dt * speed, totalDur);
+      if (curTime >= totalDur) { playing = false; updateBtn(); }
+    }
+    lastTs = ts;
+    render();
+    loop();
+  });
+}
+
+/* Calculate stage center offset so 2nd slot (index 1) sits at stage center */
+function getStageOffset() {
+  const stage = document.getElementById('stage');
+  const stagH = stage.offsetHeight;
+  // We want slot at (PAD_SLOTS + lineIdx) to appear at "1st visible position"
+  // Let's center the viewport so current line is at 1/4 from top of stage
+  const targetY = stagH * 0.25; // 25% from top = "focus zone"
+  return targetY - LINE_H * 0.5;
+}
+
+function render() {
+  const idx = curIdx();
+
+  // Current line always at 3rd visible row (0-indexed = 2)
+  // PAD_SLOTS=2, so slot of line[idx] = PAD_SLOTS + idx
+  // We want that slot at viewport row 2 → ty = (PAD_SLOTS + idx - 2) * LINE_H = idx * LINE_H
+  const ty = idx * LINE_H;
+  document.getElementById('track').style.transform = `translateY(${-ty}px)`;
+
+  // Current line class
+  if (prevCurIdx !== idx) {
+    const old = document.getElementById(`le-${prevCurIdx}`);
+    if (old) old.classList.remove('cur');
+    const cur = document.getElementById(`le-${idx}`);
+    if (cur) cur.classList.add('cur');
+    prevCurIdx = idx;
+  }
+
+  // Slider & time
+  if (!dragging) document.getElementById('slider').value = curTime;
+  document.getElementById('t-cur').textContent = fmt(curTime);
+}
+
+/* ─────────────────────────────────────────────
+   CONTROLS
+───────────────────────────────────────────── */
+document.getElementById('btn-play').addEventListener('click', () => {
+  playing = !playing;
+  lastTs  = performance.now();
+  updateBtn();
+});
+
+function updateBtn() {
+  document.getElementById('btn-play').textContent = playing ? '일시정지' : '▶  재생';
+}
+
+document.getElementById('btn-prev').addEventListener('click', () => {
+  const idx  = curIdx();
+  const prev = Math.max(0, idx - 1);
+  curTime = rows[prev].time;
+  lastTs  = performance.now();
+});
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  const idx  = curIdx();
+  const next = Math.min(rows.length - 1, idx + 1);
+  curTime = rows[next].time;
+  lastTs  = performance.now();
+});
+
+document.getElementById('btn-done').addEventListener('click', () => {
+  playing = false;
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+  speed = 1;
+  document.querySelectorAll('.btn-speed').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.getElementById('scr-player').style.display  = 'none';
+  document.getElementById('scr-welcome').style.display = 'flex';
+  document.getElementById('fileInput').value = '';
+  rows = [];
+  prevCurIdx = -1;
+});
+
+// Speed buttons
+document.getElementById('speed-group').addEventListener('click', e => {
+  const btn = e.target.closest('.btn-speed');
+  if (!btn) return;
+  speed = parseFloat(btn.dataset.speed);
+  document.querySelectorAll('.btn-speed').forEach(b => b.classList.toggle('active', b === btn));
+  lastTs = performance.now();
+});
+
+// Slider
+const sliderEl = document.getElementById('slider');
+sliderEl.addEventListener('mousedown',  () => { dragging = true; });
+sliderEl.addEventListener('touchstart', () => { dragging = true; }, { passive: true });
+sliderEl.addEventListener('input', () => {
+  curTime = parseFloat(sliderEl.value);
+  document.getElementById('t-cur').textContent = fmt(curTime);
+  render();
+});
+const endDrag = () => { dragging = false; lastTs = performance.now(); };
+sliderEl.addEventListener('mouseup',  endDrag);
+sliderEl.addEventListener('touchend', endDrag);
+
+// ─────────────────────────────────────────────
+// PWA: Service Worker 등록
+// ─────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
