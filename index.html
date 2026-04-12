@@ -522,7 +522,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v12</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v13</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -619,8 +619,8 @@ function lineHTML(i, isCur) {
 }
 
 function buildLines(idx, count) {
-  // current 위치: count=4→2번째(idx-2), count=3→1번째(idx-1), count=2→0번째(idx)
-  const curPos = Math.max(0, count - 2);
+  // 현재 줄을 위쪽 2/3 지점에 배치 (아래 여유 확보)
+  const curPos = Math.max(0, Math.floor(count * 0.6));
   const start  = idx - curPos;
   let html = '';
   for (let i = 0; i < count; i++) {
@@ -648,18 +648,19 @@ function renderVisible(idx, dir) {
   const viewport = track.parentElement;
   const availH   = viewport.clientHeight;
 
-  // 4줄 → 3줄 → 2줄 순으로 시도, 실제 높이가 맞으면 확정
-  let finalHtml = buildLines(idx, 2); // 기본값
-  for (let count = 4; count >= 2; count--) {
+  // 여유 공간에 따라 최대 줄 수 결정 (2~7줄)
+  // 많이 들어갈수록 많이 보여줌
+  let bestCount = 2;
+  for (let count = 7; count >= 2; count--) {
     const html = buildLines(idx, count);
     const h    = measureHeight(html, viewport);
-    if (h <= availH || count === 2) {
-      finalHtml = html;
+    if (h <= availH) {
+      bestCount = count;
       break;
     }
   }
 
-  track.innerHTML = finalHtml;
+  track.innerHTML = buildLines(idx, bestCount);
   track.classList.remove('anim-up', 'anim-down');
   void track.offsetWidth;
   if (dir === 'up')   track.classList.add('anim-up');
