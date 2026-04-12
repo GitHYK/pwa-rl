@@ -137,26 +137,23 @@ body {
 
 .drop-zone:hover::before { opacity: 1; }
 
+/* 파일 인풋: 완전히 표시 */
 .drop-zone input[type=file] {
-  display: none;
+  font-size: 16px;
+  color: var(--accent2);
+  cursor: pointer;
+  margin-top: 8px;
 }
-
-.file-btn {
-  margin-top: 4px;
-  padding: 10px 32px;
+.drop-zone input[type=file]::file-selector-button {
+  padding: 10px 28px;
   background: transparent;
   border: 1px solid var(--accent);
   color: var(--accent2);
   font-family: 'Noto Sans KR', sans-serif;
   font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
   border-radius: 2px;
   cursor: pointer;
-  transition: background 0.2s;
-}
-.file-btn:hover, .file-btn:active {
-  background: rgba(184,146,74,0.12);
+  margin-right: 10px;
 }
 
 .drop-icon {
@@ -521,11 +518,10 @@ input[type=range]:active::-webkit-slider-thumb {
   </div>
 
   <div class="drop-zone" id="dropZone">
-    <input type="file" id="fileInput" accept=".xlsx,.xls">
     <div class="drop-icon">📄</div>
     <div class="drop-text">엑셀 파일을 선택하세요</div>
-    <button class="file-btn" id="fileBtn">파일 선택</button>
-    <div class="drop-hint">.xlsx &nbsp;/&nbsp; .xls &nbsp;·&nbsp; 시간 · 영어 · 사람번역 · 기계번역</div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div class="drop-hint">.xlsx / .xls</div>
   </div>
 
 </div>
@@ -669,14 +665,7 @@ document.getElementById('fileInput').addEventListener('change', e => {
   const f = e.target.files[0]; if (f) load(f);
 });
 
-// 버튼 클릭 → 파일 선택 다이얼로그
-document.getElementById('fileBtn').addEventListener('click', e => {
-  e.stopPropagation();
-  document.getElementById('fileInput').click();
-});
-
 const dz = document.getElementById('dropZone');
-dz.addEventListener('click', () => document.getElementById('fileInput').click());
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
 dz.addEventListener('drop', e => {

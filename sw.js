@@ -1,14 +1,13 @@
-const CACHE_NAME = 'reading-lines-v2';
+const CACHE_NAME = 'reading-lines-v4';
 
 const PRECACHE = [
-  './index.html',
-  './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './manifest.json',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
 ];
 
-// 설치: 핵심 파일 미리 캐시
+// 설치: 아이콘·라이브러리만 캐시 (HTML은 항상 네트워크에서)
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
@@ -26,11 +25,21 @@ self.addEventListener('activate', e => {
   );
 });
 
-// fetch: 캐시 우선, 없으면 네트워크
+// fetch: HTML/JS 앱 파일 → 항상 네트워크 우선 (최신 반영)
+//        그 외 CDN 등 → 캐시 우선
 self.addEventListener('fetch', e => {
-  // Google Fonts는 네트워크 우선 (실패 시 캐시)
-  if (e.request.url.includes('fonts.googleapis.com') ||
-      e.request.url.includes('fonts.gstatic.com')) {
+  const url = e.request.url;
+
+  // index.html, manifest → 네트워크 우선
+  if (url.endsWith('/') || url.includes('index.html') || url.includes('manifest.json')) {
+    e.respondWith(
+      fetch(e.request).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Google Fonts → 네트워크 우선 + 캐시 저장
+  if (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com')) {
     e.respondWith(
       fetch(e.request)
         .then(res => {
@@ -43,7 +52,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // 나머지: 캐시 우선
+  // 나머지(CDN 라이브러리 등) → 캐시 우선
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
