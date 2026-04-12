@@ -517,7 +517,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v9</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v10</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -661,6 +661,12 @@ function renderVisible(idx, dir) {
   if (dir === 'down') track.classList.add('anim-down');
 }
 
+function parseTime(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') {
+    if (v > 0 && v < 1) return v * 86400;
+    return v;
+  }
   const s = String(v).trim();
   const p = s.split(':');
   if (p.length === 3) return +p[0] * 3600 + +p[1] * 60 + parseFloat(p[2]);
