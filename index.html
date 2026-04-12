@@ -526,7 +526,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="drop-zone" id="dropZone">
     <div class="drop-icon">📄</div>
     <div class="drop-text">엑셀 파일을 선택하세요</div>
-    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
     <div class="drop-hint">.xlsx / .xls</div>
   </div>
   <div id="status-msg" style="
@@ -717,20 +717,25 @@ function load(file) {
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       if (raw.length < 2) { showStatus('❌ 데이터가 없습니다. (행 수: ' + raw.length + ')'); return; }
 
-      // 헤더 감지
+      // 헤더 감지 (헤더행 또는 위치 기반 폴백)
       const hdr = raw[0].map(h => String(h).trim());
       showStatus('헤더: ' + hdr.join(' | '));
 
       const fi = (kws) => {
         const i = hdr.findIndex(h => kws.some(k => h.includes(k)));
-        return i >= 0 ? i : null;
+        return i >= 0 ? i : -1;
       };
-      const ti = fi(['시간','time','Time']) ?? 0;
-      const ei = fi(['영어','English','english','en']) ?? 1;
-      const hi = fi(['사람','인간','human','Human']) ?? 2;
-      const mi = fi(['기계','machine','Machine']) ?? 3;
+      const ti = fi(['시간','time','Time'])   >= 0 ? fi(['시간','time','Time'])   : 0;
+      const ei = fi(['영어','English','english']) >= 0 ? fi(['영어','English','english']) : 1;
+      const hi = fi(['사람','인간','human'])  >= 0 ? fi(['사람','인간','human'])  : 2;
+      const mi = fi(['기계','machine','Machine']) >= 0 ? fi(['기계','machine','Machine']) : 3;
 
-      rows = raw.slice(1)
+      showStatus('컬럼: 시간=' + ti + ' 영어=' + ei + ' 사람=' + hi + ' 기계=' + mi);
+
+      // 첫 행이 헤더인지 데이터인지 판단
+      const startRow = (parseTime(raw[0][ti]) === 0 && raw[0][ei]) ? 0 : 1;
+
+      rows = raw.slice(startRow)
         .map(r => ({
           time:    parseTime(r[ti]),
           english: String(r[ei] || '').trim(),
@@ -740,7 +745,7 @@ function load(file) {
         .filter(r => r.english !== '');
 
       if (!rows.length) {
-        showStatus('❌ 유효한 데이터 없음. 헤더: ' + hdr.join('|') + ' / 컬럼: 시간=' + ti + ' 영어=' + ei);
+        showStatus('❌ 데이터 없음. 헤더: [' + hdr.join('|') + '] 컬럼위치: 시간=' + ti + ' 영어=' + ei + ' 총행수=' + raw.length);
         return;
       }
 
