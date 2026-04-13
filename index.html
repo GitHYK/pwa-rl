@@ -571,7 +571,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v16</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v17</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -626,7 +626,7 @@ input[type=range]:active::-webkit-slider-thumb {
         <button class="btn-speed" data-speed="1.5">1.5×</button>
         <button class="btn-speed" data-speed="2">2×</button>
       </div>
-      <button class="btn btn-filter" id="btn-filter">미암기만</button>
+      <button class="btn btn-filter" id="btn-filter">모두 보기</button>
       <button class="btn btn-save" id="btn-save">💾 저장</button>
     </div>
   </div>
@@ -954,7 +954,7 @@ document.getElementById('btn-done').addEventListener('click', () => {
   activeRows = [];
   document.querySelectorAll('.btn-speed').forEach((b,i) => b.classList.toggle('active', i===0));
   const fb = document.getElementById('btn-filter');
-  if (fb) fb.classList.remove('active');
+  if (fb) { fb.classList.remove('active'); fb.textContent = '모두 보기'; }
   document.getElementById('scr-player').style.display  = 'none';
   document.getElementById('scr-welcome').style.display = 'flex';
   document.getElementById('fileInput').value = '';
@@ -1019,7 +1019,9 @@ document.getElementById('btn-save').addEventListener('click', () => {
 // 필터 버튼
 document.getElementById('btn-filter').addEventListener('click', () => {
   filterOnly = !filterOnly;
-  document.getElementById('btn-filter').classList.toggle('active', filterOnly);
+  const fb = document.getElementById('btn-filter');
+  fb.classList.toggle('active', filterOnly);
+  fb.textContent = filterOnly ? '미암기만' : '모두 보기';
   activeRows = filterOnly ? rows.filter(r => !memorized[r._origIdx]) : rows.slice();
   if (!activeRows.length) { activeRows = rows.slice(); }
   // 현재 시간과 가장 가까운 activeRows 인덱스로 이동
