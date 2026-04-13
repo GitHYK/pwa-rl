@@ -429,14 +429,14 @@ body {
   flex-shrink: 0;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  padding: 14px 48px 20px;
+  padding: 10px 16px 12px;
 }
 
 .slider-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .t-label {
@@ -479,18 +479,20 @@ input[type=range]:active::-webkit-slider-thumb {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 6px;
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 .btn {
-  padding: 8px 26px;
+  padding: 7px 14px;
   background: transparent;
   border: 1px solid var(--border2);
   color: var(--ko);
   font-family: 'Noto Sans KR', sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 300;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   cursor: pointer;
   border-radius: 2px;
   transition: all 0.2s;
@@ -504,11 +506,11 @@ input[type=range]:active::-webkit-slider-thumb {
 .btn-play {
   border-color: var(--accent);
   color: var(--accent2);
-  padding: 8px 44px;
-  font-size: 14px;
+  padding: 7px 24px;
+  font-size: 13px;
   font-weight: 400;
-  letter-spacing: 0.08em;
-  min-width: 130px;
+  letter-spacing: 0.06em;
+  min-width: 90px;
   text-align: center;
 }
 
@@ -540,14 +542,14 @@ input[type=range]:active::-webkit-slider-thumb {
 }
 
 .btn-speed {
-  padding: 8px 14px;
+  padding: 7px 10px;
   background: transparent;
   border: none;
   border-right: 1px solid var(--border2);
   color: var(--ts-cur);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   cursor: pointer;
   transition: all 0.18s;
   white-space: nowrap;
@@ -571,7 +573,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v17</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v18</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -1033,6 +1035,34 @@ document.getElementById('btn-filter').addEventListener('click', () => {
   lastTs  = performance.now();
   prevCurIdx = -1;
 });
+
+// 스와이프 제스처 (stage 영역)
+(function() {
+  const stage = document.getElementById('stage');
+  if (!stage) return;
+  let startX = 0, startY = 0, startT = 0;
+  stage.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    startT = Date.now();
+  }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    const dt = Date.now() - startT;
+    if (dt > 500) return; // 너무 느리면 무시
+    if (Math.abs(dx) < 40 && Math.abs(dy) < 40) return; // 너무 짧으면 무시
+    if (Math.abs(dy) > Math.abs(dx)) {
+      // 세로 스와이프
+      if (dy < -40) document.getElementById('btn-next').click(); // 위로 → 다음
+      else if (dy > 40) document.getElementById('btn-prev').click(); // 아래로 → 이전
+    } else {
+      // 가로 스와이프
+      if (dx < -40) document.getElementById('btn-next').click(); // 왼쪽 → 다음
+      else if (dx > 40) document.getElementById('btn-prev').click(); // 오른쪽 → 이전
+    }
+  }, { passive: true });
+})();
 
 // 키보드 방향키
 document.addEventListener('keydown', e => {
