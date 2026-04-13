@@ -523,6 +523,12 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .btn-done:hover { border-color: #a04040; color: #c05050; }
 
+.btn-save {
+  color: var(--ko);
+  border-color: var(--border2);
+}
+.btn-save:hover { border-color: var(--accent); color: var(--accent2); }
+
 /* ── Speed Controls ── */
 .speed-group {
   display: flex;
@@ -565,7 +571,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v15</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v16</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -621,6 +627,7 @@ input[type=range]:active::-webkit-slider-thumb {
         <button class="btn-speed" data-speed="2">2×</button>
       </div>
       <button class="btn btn-filter" id="btn-filter">미암기만</button>
+      <button class="btn btn-save" id="btn-save">💾 저장</button>
     </div>
   </div>
 
@@ -643,6 +650,10 @@ let filterOnly = false;
 let filteredRows = []; // 필터 적용된 rows
 let fileKey    = '';   // localStorage 키
 let activeRows = [];   // 현재 표시 대상 rows
+let origWorkbook = null; // 원본 워크북 (저장용)
+let origColCount = 0;    // 원본 컬럼 수
+let memColIdx = -1;      // 암기 컬럼 인덱스 (-1이면 없음)
+let origFileName = '';   // 원본 파일명
 
 /* ─────────────────────────────────────────────
    RENDER TRACK
@@ -777,6 +788,9 @@ function load(file) {
       const wb = XLSX.read(ev.target.result, { type: 'array' });
       if (!wb.SheetNames.length) { showStatus('❌ 시트를 찾을 수 없습니다.'); return; }
 
+      origWorkbook = wb;
+      origFileName = file.name;
+
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       if (raw.length < 2) { showStatus('❌ 데이터가 없습니다. (행 수: ' + raw.length + ')'); return; }
@@ -793,6 +807,8 @@ function load(file) {
       const ei = fi(['영어','English','english']) >= 0 ? fi(['영어','English','english']) : 1;
       const hi = fi(['사람','인간','human'])  >= 0 ? fi(['사람','인간','human'])  : 2;
       const mi = fi(['기계','machine','Machine']) >= 0 ? fi(['기계','machine','Machine']) : 3;
+      memColIdx = fi(['암기','memorized','Memorized']);
+      origColCount = hdr.length;
 
       showStatus('컬럼: 시간=' + ti + ' 영어=' + ei + ' 사람=' + hi + ' 기계=' + mi);
 
@@ -815,8 +831,17 @@ function load(file) {
 
       rows.sort((a, b) => a.time - b.time);
       rows.forEach((r, i) => r._origIdx = i);
-      fileKey = 'rl_mem_' + file.name.replace(/[^a-zA-Z0-9]/g,'_');
-      memorized = JSON.parse(localStorage.getItem(fileKey) || '{}');
+      // 암기 컬럼이 있으면 파일에서 복원, 없으면 localStorage 폴백
+      if (memColIdx >= 0) {
+        memorized = {};
+        rows.forEach(r => {
+          const val = String(raw[r._origIdx + (startRow === 0 ? 0 : 1)][memColIdx] || '').trim();
+          if (val === '1' || val === 'Y' || val === 'y' || val === '암기') memorized[r._origIdx] = true;
+        });
+      } else {
+        fileKey = 'rl_mem_' + file.name.replace(/[^a-zA-Z0-9]/g,'_');
+        memorized = JSON.parse(localStorage.getItem(fileKey) || '{}');
+      }
       filterOnly = false;
       document.getElementById('btn-filter').classList.remove('active');
       activeRows = rows.slice();
@@ -947,6 +972,49 @@ function toggleMem(origIdx) {
   localStorage.setItem(fileKey, JSON.stringify(memorized));
   prevCurIdx = -1; // 강제 재렌더
 }
+
+// 💾 저장 버튼 - 암기 상태를 엑셀에 기록 후 다운로드
+document.getElementById('btn-save').addEventListener('click', () => {
+  if (!origWorkbook || !rows.length) return;
+
+  const ws = origWorkbook.Sheets[origWorkbook.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  // 헤더에 암기 컬럼 추가 (없으면)
+  const hdr = raw[0];
+  let mCol = memColIdx >= 0 ? memColIdx : hdr.length;
+  if (memColIdx < 0) hdr.push('암기');
+
+  // 데이터 행에 암기 값 기록
+  rows.forEach(r => {
+    const rowNum = r._origIdx + (raw[0][0] === '' || isNaN(parseTime(raw[0][0])) ? 1 : 0) + 1;
+    // 안전하게 해당 행을 직접 인덱스로
+  });
+
+  // 전체 raw 배열에 암기 컬럼 값 기록
+  for (let i = 1; i < raw.length; i++) {
+    while (raw[i].length <= mCol) raw[i].push('');
+    raw[i][mCol] = '';
+  }
+  rows.forEach(r => {
+    const rowI = r._origIdx + 1; // 헤더 제외
+    if (rowI < raw.length) {
+      raw[rowI][mCol] = memorized[r._origIdx] ? '1' : '';
+    }
+  });
+
+  // 새 워크시트 생성
+  const newWs = XLSX.utils.aoa_to_sheet(raw);
+  const newWb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(newWb, newWs, origWorkbook.SheetNames[0]);
+
+  // 다운로드
+  const dotIdx = origFileName.lastIndexOf('.');
+  const saveName = dotIdx >= 0
+    ? origFileName.slice(0, dotIdx) + '_암기' + origFileName.slice(dotIdx)
+    : origFileName + '_암기';
+  XLSX.writeFile(newWb, saveName);
+});
 
 // 필터 버튼
 document.getElementById('btn-filter').addEventListener('click', () => {
