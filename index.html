@@ -522,7 +522,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v13</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v14</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -869,6 +869,20 @@ document.getElementById('btn-done').addEventListener('click', () => {
   document.getElementById('fileInput').value = '';
   rows = [];
   prevCurIdx = -1;
+});
+
+// 키보드 방향키
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    document.getElementById('btn-next').click();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    document.getElementById('btn-prev').click();
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    document.getElementById('btn-play').click();
+  }
 });
 
 // Speed buttons

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'reading-lines-v13';
+const CACHE_NAME = 'reading-lines-v14';
 
 const PRECACHE = [
   './icon-192.png',
