@@ -381,6 +381,49 @@ body {
 /* ── Dim non-current lines ── */
 .le.dim { opacity: 0.45; }
 
+/* ── 암기 버튼 ── */
+.mem-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-right: 10px;
+  margin-top: 6px;
+  border: 1px solid var(--border2);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ts);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.mem-btn:hover { border-color: var(--accent); color: var(--accent2); }
+.le.memorized .mem-btn {
+  border-color: var(--accent);
+  background: rgba(184,146,74,0.18);
+  color: var(--accent2);
+}
+.le.memorized { opacity: 0.35; }
+.le.cur.memorized { opacity: 1; }
+
+/* ── 필터 버튼 ── */
+.btn-filter {
+  border-color: var(--border);
+  color: var(--ts-cur);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+.btn-filter.active {
+  border-color: var(--accent);
+  color: var(--accent2);
+  background: rgba(184,146,74,0.08);
+}
+
 /* ── Controls ── */
 .controls {
   flex-shrink: 0;
@@ -522,7 +565,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v14</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v15</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -577,6 +620,7 @@ input[type=range]:active::-webkit-slider-thumb {
         <button class="btn-speed" data-speed="1.5">1.5×</button>
         <button class="btn-speed" data-speed="2">2×</button>
       </div>
+      <button class="btn btn-filter" id="btn-filter">미암기만</button>
     </div>
   </div>
 
@@ -594,6 +638,11 @@ let lastTs     = null;
 let raf        = null;
 let dragging   = false;
 let speed      = 1;
+let memorized  = {};   // { rowIndex: true }
+let filterOnly = false;
+let filteredRows = []; // 필터 적용된 rows
+let fileKey    = '';   // localStorage 키
+let activeRows = [];   // 현재 표시 대상 rows
 
 /* ─────────────────────────────────────────────
    RENDER TRACK
@@ -603,10 +652,13 @@ function esc(s) {
 }
 
 function lineHTML(i, isCur) {
-  if (i < 0 || i >= rows.length) return '<div class="le"></div>';
-  const r = rows[i];
-  return `<div class="le${isCur ? ' cur' : ' dim'}">
+  if (i < 0 || i >= activeRows.length) return '<div class="le"></div>';
+  const r   = activeRows[i];
+  const ri  = r._origIdx;
+  const mem = memorized[ri] ? ' memorized' : '';
+  return `<div class="le${isCur ? ' cur' : ' dim'}${mem}" data-orig="${ri}">
       <div class="le-bar"></div>
+      <button class="mem-btn" onclick="toggleMem(${ri})" title="암기 표시">${memorized[ri] ? '✓' : '○'}</button>
       <div class="le-ts">${fmt(r.time)}</div>
       <div class="le-body">
         <div class="le-en">${esc(r.english)}</div>
@@ -762,6 +814,12 @@ function load(file) {
       }
 
       rows.sort((a, b) => a.time - b.time);
+      rows.forEach((r, i) => r._origIdx = i);
+      fileKey = 'rl_mem_' + file.name.replace(/[^a-zA-Z0-9]/g,'_');
+      memorized = JSON.parse(localStorage.getItem(fileKey) || '{}');
+      filterOnly = false;
+      document.getElementById('btn-filter').classList.remove('active');
+      activeRows = rows.slice();
       totalDur = rows[rows.length - 1].time + 6;
       showStatus('');
 
@@ -784,14 +842,16 @@ function load(file) {
 ───────────────────────────────────────────── */
 function curIdx() {
   let idx = 0;
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i].time <= curTime) idx = i; else break;
+  for (let i = 0; i < activeRows.length; i++) {
+    if (activeRows[i].time <= curTime) idx = i; else break;
   }
   return idx;
 }
 
 function initPlayer() {
-  curTime = rows[0].time;
+  activeRows = filterOnly ? rows.filter(r => !memorized[r._origIdx]) : rows.slice();
+  if (!activeRows.length) activeRows = rows.slice();
+  curTime = activeRows[0].time;
   prevCurIdx = -1;
   playing = true;
   lastTs  = performance.now();
@@ -808,8 +868,9 @@ function loop() {
   raf = requestAnimationFrame(ts => {
     if (playing && !dragging) {
       const dt = (ts - lastTs) / 1000;
-      curTime = Math.min(curTime + dt * speed, totalDur);
-      if (curTime >= totalDur) { playing = false; updateBtn(); }
+      const activeDur = activeRows.length ? activeRows[activeRows.length-1].time + 6 : totalDur;
+      curTime = Math.min(curTime + dt * speed, activeDur);
+      if (curTime >= activeDur) { playing = false; updateBtn(); }
     }
     lastTs = ts;
     render();
@@ -846,28 +907,60 @@ function updateBtn() {
 document.getElementById('btn-prev').addEventListener('click', () => {
   const idx  = curIdx();
   const prev = Math.max(0, idx - 1);
-  curTime = rows[prev].time;
+  curTime = activeRows[prev].time;
   lastTs  = performance.now();
-  prevCurIdx = -1; // force re-render
+  prevCurIdx = -1;
 });
 
 document.getElementById('btn-next').addEventListener('click', () => {
   const idx  = curIdx();
-  const next = Math.min(rows.length - 1, idx + 1);
-  curTime = rows[next].time;
+  const next = Math.min(activeRows.length - 1, idx + 1);
+  curTime = activeRows[next].time;
   lastTs  = performance.now();
-  prevCurIdx = -1; // force re-render
+  prevCurIdx = -1;
 });
 
 document.getElementById('btn-done').addEventListener('click', () => {
   playing = false;
   if (raf) { cancelAnimationFrame(raf); raf = null; }
   speed = 1;
+  filterOnly = false;
+  memorized = {};
+  activeRows = [];
   document.querySelectorAll('.btn-speed').forEach((b,i) => b.classList.toggle('active', i===0));
+  const fb = document.getElementById('btn-filter');
+  if (fb) fb.classList.remove('active');
   document.getElementById('scr-player').style.display  = 'none';
   document.getElementById('scr-welcome').style.display = 'flex';
   document.getElementById('fileInput').value = '';
   rows = [];
+  prevCurIdx = -1;
+});
+
+// 암기 토글
+function toggleMem(origIdx) {
+  if (memorized[origIdx]) {
+    delete memorized[origIdx];
+  } else {
+    memorized[origIdx] = true;
+  }
+  localStorage.setItem(fileKey, JSON.stringify(memorized));
+  prevCurIdx = -1; // 강제 재렌더
+}
+
+// 필터 버튼
+document.getElementById('btn-filter').addEventListener('click', () => {
+  filterOnly = !filterOnly;
+  document.getElementById('btn-filter').classList.toggle('active', filterOnly);
+  activeRows = filterOnly ? rows.filter(r => !memorized[r._origIdx]) : rows.slice();
+  if (!activeRows.length) { activeRows = rows.slice(); }
+  // 현재 시간과 가장 가까운 activeRows 인덱스로 이동
+  let closest = 0;
+  for (let i = 0; i < activeRows.length; i++) {
+    if (activeRows[i].time <= curTime) closest = i;
+  }
+  curTime = activeRows[closest].time;
+  lastTs  = performance.now();
   prevCurIdx = -1;
 });
 
