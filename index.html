@@ -267,28 +267,24 @@ body {
 .viewport {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
 }
 
-@keyframes snapUp {
-  from { opacity: 0.3; transform: translateY(12px); }
-  to   { opacity: 1;   transform: translateY(0); }
-}
-@keyframes snapDown {
-  from { opacity: 0.3; transform: translateY(-12px); }
-  to   { opacity: 1;   transform: translateY(0); }
+@keyframes fadeIn {
+  from { opacity: 0.4; }
+  to   { opacity: 1; }
 }
 
 .track {
+  position: absolute;
+  left: 0; right: 0;
+  top: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  width: 100%;
+  will-change: transform;
 }
 
-.track.anim-up   { animation: snapUp   0.28s cubic-bezier(0.4,0,0.2,1); }
-.track.anim-down { animation: snapDown 0.28s cubic-bezier(0.4,0,0.2,1); }
+.track.anim-in { animation: fadeIn 0.18s ease; }
 
 /* ── Line Entry ── */
 .le {
@@ -299,6 +295,7 @@ body {
   gap: 0;
   border-bottom: 1px solid var(--border);
   position: relative;
+  min-height: 80px;
 }
 
 .le:last-child { border-bottom: none; }
@@ -573,7 +570,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v19</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v20</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -684,15 +681,20 @@ function lineHTML(i, isCur) {
 }
 
 function buildLines(idx, count) {
-  // 현재 줄을 위쪽 2/3 지점에 배치 (아래 여유 확보)
   const curPos = Math.max(0, Math.floor(count * 0.6));
   const start  = idx - curPos;
   let html = '';
-  for (let i = 0; i < count; i++) {
+  // 위아래 여유 2줄씩 추가 렌더 (translateY 스크롤용)
+  for (let i = -2; i < count + 2; i++) {
     html += lineHTML(start + i, start + i === idx);
   }
   return html;
 }
+
+// 라인 높이 캐시
+let lineHeightCache = [];
+let lastBuildIdx    = -1;
+let lastBuildCount  = 0;
 
 function measureHeight(html, refEl) {
   // 임시 클론으로 실제 콘텐츠 높이 측정 (height:auto)
@@ -708,28 +710,41 @@ function measureHeight(html, refEl) {
   return h;
 }
 
+let bestCountCache = 4;
+
 function renderVisible(idx, dir) {
   const track    = document.getElementById('track');
   const viewport = track.parentElement;
   const availH   = viewport.clientHeight;
 
-  // 여유 공간에 따라 최대 줄 수 결정 (2~7줄)
-  // 많이 들어갈수록 많이 보여줌
-  let bestCount = 2;
-  for (let count = 7; count >= 2; count--) {
-    const html = buildLines(idx, count);
-    const h    = measureHeight(html, viewport);
-    if (h <= availH) {
-      bestCount = count;
-      break;
+  // 화면 높이에 맞는 최적 줄 수 계산 (인덱스 바뀔 때만)
+  if (idx !== lastBuildIdx) {
+    let bestCount = 2;
+    for (let count = 7; count >= 2; count--) {
+      const h = measureHeight(buildLines(idx, count), viewport);
+      if (h <= availH) { bestCount = count; break; }
     }
+    bestCountCache = bestCount;
+
+    track.innerHTML = buildLines(idx, bestCount);
+    track.classList.remove('anim-in');
+    void track.offsetWidth;
+    if (dir) track.classList.add('anim-in');
+
+    // 라인 높이 측정 및 캐시
+    const les = track.querySelectorAll('.le');
+    lineHeightCache = Array.from(les).map(el => el.offsetHeight);
+    lastBuildIdx   = idx;
+    lastBuildCount = bestCount;
   }
 
-  track.innerHTML = buildLines(idx, bestCount);
-  track.classList.remove('anim-up', 'anim-down');
-  void track.offsetWidth;
-  if (dir === 'up')   track.classList.add('anim-up');
-  if (dir === 'down') track.classList.add('anim-down');
+  // 현재 라인의 track 내 위치 계산
+  const curPos = Math.max(0, Math.floor(bestCountCache * 0.6));
+  const offsetInTrack = lineHeightCache.slice(0, curPos + 2).reduce((a,b) => a+b, 0)
+                      - lineHeightCache.slice(0, 2).reduce((a,b) => a+b, 0); // 위 여유 2줄 오프셋
+  const focusY = availH * 0.35; // 뷰포트 내 현재 줄 목표 위치
+
+  return { offsetInTrack, focusY, curLineH: lineHeightCache[curPos + 2] || 80 };
 }
 
 function parseTime(v) {
@@ -909,11 +924,23 @@ let prevCurIdx = -1;
 
 function render() {
   const idx = curIdx();
-  if (idx !== prevCurIdx) {
-    const dir = idx > prevCurIdx ? 'up' : 'down';
-    renderVisible(idx, prevCurIdx === -1 ? null : dir);
-    prevCurIdx = idx;
+
+  // 인덱스 바뀔 때 또는 첫 렌더 시 DOM 재구성
+  const dir = idx > prevCurIdx ? 'up' : (idx < prevCurIdx ? 'down' : null);
+  const { offsetInTrack, focusY, curLineH } = renderVisible(idx, prevCurIdx === -1 ? null : dir);
+  prevCurIdx = idx;
+
+  // 현재 라인 안에서의 분수 위치 (0→1)
+  let frac = 0;
+  if (idx < activeRows.length - 1) {
+    const a = activeRows[idx].time, b = activeRows[idx + 1].time;
+    if (b > a) frac = Math.max(0, Math.min(1, (curTime - a) / (b - a)));
   }
+
+  // track을 translateY로 부드럽게 이동
+  const ty = offsetInTrack + frac * curLineH - focusY;
+  document.getElementById('track').style.transform = `translateY(${-ty}px)`;
+
   if (!dragging) document.getElementById('slider').value = curTime;
   document.getElementById('t-cur').textContent = fmt(curTime);
 }
