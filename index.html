@@ -46,6 +46,9 @@ body {
   justify-content: center;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+  position: fixed;
+  width: 100%;
 }
 
 /* ══════════════════════════════════════════
@@ -244,6 +247,9 @@ body {
   flex: 1;
   position: relative;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-overflow-scrolling: auto;
 }
 
 /* fade masks */
@@ -565,7 +571,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v21</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v22</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -1123,28 +1129,31 @@ document.getElementById('btn-filter').addEventListener('click', () => {
   if (!stage) return;
 
   stage.addEventListener('touchstart', e => {
+    e.preventDefault();
     cancelMomentum();
     lastTouchY    = e.touches[0].clientY;
     lastTouchTime = Date.now();
     scrollVel     = 0;
     dragging      = true;
     if (playing) { playing = false; updateBtn(); }
-  }, { passive: true });
+  }, { passive: false });
 
   stage.addEventListener('touchmove', e => {
+    e.preventDefault();
     const y   = e.touches[0].clientY;
     const dy  = lastTouchY - y;        // 손가락 위로 → 양수 → 다음
     const dt  = Math.max(1, Date.now() - lastTouchTime);
-    scrollVel = (dy / LINE_H) / dt;    // 라인/ms
+    scrollVel = (dy / LINE_H) / dt;
     currentFloat = Math.max(0, Math.min(activeRows.length-1, currentFloat + dy / LINE_H));
     lastTouchY    = y;
     lastTouchTime = Date.now();
-  }, { passive: true });
+  }, { passive: false });
 
-  stage.addEventListener('touchend', () => {
+  stage.addEventListener('touchend', e => {
+    e.preventDefault();
     dragging = false;
     momentumRAF = requestAnimationFrame(runMomentum);
-  }, { passive: true });
+  }, { passive: false });
 
   // 마우스 휠 지원 (PC)
   stage.addEventListener('wheel', e => {
