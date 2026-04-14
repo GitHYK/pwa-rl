@@ -270,11 +270,6 @@ body {
   overflow: hidden;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0.4; }
-  to   { opacity: 1; }
-}
-
 .track {
   position: absolute;
   left: 0; right: 0;
@@ -284,18 +279,18 @@ body {
   will-change: transform;
 }
 
-.track.anim-in { animation: fadeIn 0.18s ease; }
-
 /* ── Line Entry ── */
 .le {
   flex-shrink: 0;
+  height: var(--line-h, 120px);
   padding: 8px 16px 8px 0;
   display: flex;
   align-items: flex-start;
   gap: 0;
   border-bottom: 1px solid var(--border);
   position: relative;
-  min-height: 80px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .le:last-child { border-bottom: none; }
@@ -570,7 +565,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v20</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v21</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -680,72 +675,52 @@ function lineHTML(i, isCur) {
     </div>`;
 }
 
-function buildLines(idx, count) {
-  const curPos = Math.max(0, Math.floor(count * 0.6));
-  const start  = idx - curPos;
-  let html = '';
-  // 위아래 여유 2줄씩 추가 렌더 (translateY 스크롤용)
-  for (let i = -2; i < count + 2; i++) {
-    html += lineHTML(start + i, start + i === idx);
+// ── iOS 피커 스크롤 엔진 ──────────────────────────
+let LINE_H       = 120;   // px, initPlayer에서 계산
+let FOCUS_RATIO  = 0.35;  // 현재 라인의 뷰포트 내 위치 (위에서 35%)
+let currentFloat = 0;     // float 인덱스 (3.7 = 3번째와 4번째 사이)
+let scrollVel    = 0;     // px/ms
+let momentumRAF  = null;
+let lastTouchY   = 0;
+let lastTouchTime = 0;
+const WINDOW     = 6;     // 위아래 렌더 여유
+
+function computeLineH() {
+  const stage = document.getElementById('stage');
+  // 4줄 기준 높이, 최소 80 최대 200
+  return Math.max(80, Math.min(200, Math.floor(stage.clientHeight / 4)));
+}
+
+function buildWindow(floatIdx) {
+  const ci  = Math.round(floatIdx);
+  const html = [];
+  for (let i = ci - WINDOW; i <= ci + WINDOW; i++) {
+    html.push(lineHTML(i, i === ci));
   }
-  return html;
+  return { html: html.join(''), start: ci - WINDOW };
 }
 
-// 라인 높이 캐시
-let lineHeightCache = [];
-let lastBuildIdx    = -1;
-let lastBuildCount  = 0;
+let trackStart = 0; // 현재 track의 첫 라인 인덱스
 
-function measureHeight(html, refEl) {
-  // 임시 클론으로 실제 콘텐츠 높이 측정 (height:auto)
-  const temp = document.createElement('div');
-  temp.style.cssText =
-    'position:fixed;top:-9999px;left:0;' +
-    'width:' + refEl.clientWidth + 'px;' +
-    'display:flex;flex-direction:column;visibility:hidden;pointer-events:none;';
-  temp.innerHTML = html;
-  document.body.appendChild(temp);
-  const h = temp.scrollHeight;
-  document.body.removeChild(temp);
-  return h;
+function refreshTrack(floatIdx) {
+  const track   = document.getElementById('track');
+  const { html, start } = buildWindow(floatIdx);
+  track.innerHTML = html;
+  trackStart = start;
+  // CSS 변수로 라인 높이 설정
+  document.documentElement.style.setProperty('--line-h', LINE_H + 'px');
 }
 
-let bestCountCache = 4;
-
-function renderVisible(idx, dir) {
-  const track    = document.getElementById('track');
-  const viewport = track.parentElement;
-  const availH   = viewport.clientHeight;
-
-  // 화면 높이에 맞는 최적 줄 수 계산 (인덱스 바뀔 때만)
-  if (idx !== lastBuildIdx) {
-    let bestCount = 2;
-    for (let count = 7; count >= 2; count--) {
-      const h = measureHeight(buildLines(idx, count), viewport);
-      if (h <= availH) { bestCount = count; break; }
-    }
-    bestCountCache = bestCount;
-
-    track.innerHTML = buildLines(idx, bestCount);
-    track.classList.remove('anim-in');
-    void track.offsetWidth;
-    if (dir) track.classList.add('anim-in');
-
-    // 라인 높이 측정 및 캐시
-    const les = track.querySelectorAll('.le');
-    lineHeightCache = Array.from(les).map(el => el.offsetHeight);
-    lastBuildIdx   = idx;
-    lastBuildCount = bestCount;
-  }
-
-  // 현재 라인의 track 내 위치 계산
-  const curPos = Math.max(0, Math.floor(bestCountCache * 0.6));
-  const offsetInTrack = lineHeightCache.slice(0, curPos + 2).reduce((a,b) => a+b, 0)
-                      - lineHeightCache.slice(0, 2).reduce((a,b) => a+b, 0); // 위 여유 2줄 오프셋
-  const focusY = availH * 0.35; // 뷰포트 내 현재 줄 목표 위치
-
-  return { offsetInTrack, focusY, curLineH: lineHeightCache[curPos + 2] || 80 };
+function applyTranslate(floatIdx) {
+  const track   = document.getElementById('track');
+  const stage   = document.getElementById('stage');
+  const focusY  = stage.clientHeight * FOCUS_RATIO;
+  const relPos  = floatIdx - trackStart; // track 내 float 위치
+  const ty      = relPos * LINE_H - focusY;
+  track.style.transform = `translateY(${-ty}px)`;
 }
+
+
 
 function parseTime(v) {
   if (v === null || v === undefined || v === '') return 0;
@@ -883,27 +858,32 @@ function load(file) {
    PLAYER
 ───────────────────────────────────────────── */
 function curIdx() {
-  let idx = 0;
-  for (let i = 0; i < activeRows.length; i++) {
-    if (activeRows[i].time <= curTime) idx = i; else break;
-  }
-  return idx;
+  return Math.max(0, Math.min(activeRows.length-1, Math.round(currentFloat)));
 }
 
 function initPlayer() {
   activeRows = filterOnly ? rows.filter(r => !memorized[r._origIdx]) : rows.slice();
   if (!activeRows.length) activeRows = rows.slice();
-  curTime = activeRows[0].time;
-  prevCurIdx = -1;
+  curTime      = activeRows[0].time;
+  currentFloat = 0;
+  prevCurIdx   = -1;
+  LINE_H       = computeLineH();
+  document.documentElement.style.setProperty('--line-h', LINE_H + 'px');
   playing = true;
   lastTs  = performance.now();
 
   document.getElementById('scr-welcome').style.display = 'none';
   document.getElementById('scr-player').style.display  = 'flex';
 
-  updateBtn();
-  if (raf) cancelAnimationFrame(raf);
-  loop();
+  // 레이아웃 확정 후 트랙 초기화
+  requestAnimationFrame(() => {
+    LINE_H = computeLineH();
+    document.documentElement.style.setProperty('--line-h', LINE_H + 'px');
+    refreshTrack(0);
+    updateBtn();
+    if (raf) cancelAnimationFrame(raf);
+    loop();
+  });
 }
 
 function loop() {
@@ -922,24 +902,67 @@ function loop() {
 
 let prevCurIdx = -1;
 
-function render() {
-  const idx = curIdx();
-
-  // 인덱스 바뀔 때 또는 첫 렌더 시 DOM 재구성
-  const dir = idx > prevCurIdx ? 'up' : (idx < prevCurIdx ? 'down' : null);
-  const { offsetInTrack, focusY, curLineH } = renderVisible(idx, prevCurIdx === -1 ? null : dir);
-  prevCurIdx = idx;
-
-  // 현재 라인 안에서의 분수 위치 (0→1)
+function floatFromTime(t) {
+  // curTime → float 인덱스
+  let idx = 0;
+  for (let i = 0; i < activeRows.length; i++) {
+    if (activeRows[i].time <= t) idx = i; else break;
+  }
   let frac = 0;
   if (idx < activeRows.length - 1) {
-    const a = activeRows[idx].time, b = activeRows[idx + 1].time;
-    if (b > a) frac = Math.max(0, Math.min(1, (curTime - a) / (b - a)));
+    const a = activeRows[idx].time, b = activeRows[idx+1].time;
+    if (b > a) frac = Math.max(0, Math.min(1, (t - a) / (b - a)));
+  }
+  return idx + frac;
+}
+
+function timeFromFloat(f) {
+  const i = Math.max(0, Math.min(activeRows.length-1, Math.round(f)));
+  return activeRows[i].time;
+}
+
+function render() {
+  // 자동재생 중: curTime → currentFloat
+  if (playing && !dragging) {
+    currentFloat = floatFromTime(curTime);
+  } else {
+    // 수동 스크롤 중: currentFloat → curTime 반영
+    const i = Math.max(0, Math.min(activeRows.length-1, Math.round(currentFloat)));
+    const prev = Math.max(0, i-1);
+    const next = Math.min(activeRows.length-1, i+1);
+    const frac = currentFloat - Math.floor(currentFloat);
+    if (next !== Math.floor(currentFloat)) {
+      curTime = activeRows[Math.floor(currentFloat)].time +
+        frac * (activeRows[Math.min(activeRows.length-1, Math.floor(currentFloat)+1)].time
+              - activeRows[Math.floor(currentFloat)].time);
+    } else {
+      curTime = activeRows[i].time;
+    }
   }
 
-  // track을 translateY로 부드럽게 이동
-  const ty = offsetInTrack + frac * curLineH - focusY;
-  document.getElementById('track').style.transform = `translateY(${-ty}px)`;
+  currentFloat = Math.max(0, Math.min(activeRows.length - 1, currentFloat));
+
+  // 트랙 윈도우 갱신 (현재 인덱스가 윈도우 경계 근처면 재렌더)
+  const ci = Math.round(currentFloat);
+  if (Math.abs(ci - (trackStart + WINDOW)) > WINDOW * 0.5) {
+    refreshTrack(currentFloat);
+  }
+
+  // translateY 적용 (매 프레임)
+  applyTranslate(currentFloat);
+
+  // 현재 라인 강조
+  const curI = Math.round(currentFloat);
+  if (curI !== prevCurIdx) {
+    document.querySelectorAll('.le.cur').forEach(el => el.classList.remove('cur'));
+    document.querySelectorAll('.le.dim').forEach(el => el.classList.remove('dim'));
+    document.querySelectorAll('.le').forEach((el, i) => {
+      const lineIdx = trackStart + i;
+      el.classList.toggle('cur', lineIdx === curI);
+      el.classList.toggle('dim', lineIdx !== curI);
+    });
+    prevCurIdx = curI;
+  }
 
   if (!dragging) document.getElementById('slider').value = curTime;
   document.getElementById('t-cur').textContent = fmt(curTime);
@@ -959,19 +982,17 @@ function updateBtn() {
 }
 
 document.getElementById('btn-prev').addEventListener('click', () => {
-  const idx  = curIdx();
-  const prev = Math.max(0, idx - 1);
-  curTime = activeRows[prev].time;
+  const idx = Math.max(0, Math.round(currentFloat) - 1);
+  currentFloat = idx;
+  curTime = activeRows[idx].time;
   lastTs  = performance.now();
-  prevCurIdx = -1;
 });
 
 document.getElementById('btn-next').addEventListener('click', () => {
-  const idx  = curIdx();
-  const next = Math.min(activeRows.length - 1, idx + 1);
-  curTime = activeRows[next].time;
+  const idx = Math.min(activeRows.length - 1, Math.round(currentFloat) + 1);
+  currentFloat = idx;
+  curTime = activeRows[idx].time;
   lastTs  = performance.now();
-  prevCurIdx = -1;
 });
 
 document.getElementById('btn-done').addEventListener('click', () => {
@@ -1063,34 +1084,39 @@ document.getElementById('btn-filter').addEventListener('click', () => {
   prevCurIdx = -1;
 });
 
-// 터치 연속 스크롤 (stage 영역)
+// iOS 피커 스타일 터치 스크롤
 (function() {
-  let touchY     = 0;
-  let touchTime  = 0;
-  let velY       = 0;      // 속도 (px/ms)
-  let momentum   = null;   // 관성 RAF
-
   function cancelMomentum() {
-    if (momentum) { cancelAnimationFrame(momentum); momentum = null; }
+    if (momentumRAF) { cancelAnimationFrame(momentumRAF); momentumRAF = null; }
   }
 
-  function applyDelta(dy) {
-    // 화면 높이 대비 스크롤 → 전체 시간 비율로 변환
-    const stageH  = document.getElementById('stage').offsetHeight || 400;
-    const ratio   = dy / stageH;          // -1 ~ 1
-    const dtSec   = ratio * totalDur * 0.18; // 감도 조절 (0.18)
-    curTime = Math.max(
-      activeRows.length ? activeRows[0].time : 0,
-      Math.min(curTime - dtSec, activeRows.length ? activeRows[activeRows.length-1].time + 4 : totalDur)
-    );
-    lastTs = performance.now();
+  function snapToNearest() {
+    // 가장 가까운 정수 인덱스로 스프링 스냅
+    const target = Math.max(0, Math.min(activeRows.length-1, Math.round(currentFloat)));
+    function spring() {
+      const diff = target - currentFloat;
+      if (Math.abs(diff) < 0.002) {
+        currentFloat = target;
+        curTime = activeRows[target].time;
+        lastTs = performance.now();
+        return;
+      }
+      currentFloat += diff * 0.22;
+      momentumRAF = requestAnimationFrame(spring);
+    }
+    spring();
   }
 
   function runMomentum() {
-    if (Math.abs(velY) < 0.05) { velY = 0; return; }
-    applyDelta(velY * 16);          // ~60fps frame
-    velY *= 0.88;                   // 마찰
-    momentum = requestAnimationFrame(runMomentum);
+    if (Math.abs(scrollVel) < 0.0005) {
+      scrollVel = 0;
+      snapToNearest();
+      return;
+    }
+    // 위로 스크롤(손가락 위로) = 다음 라인 = currentFloat 증가
+    currentFloat = Math.max(0, Math.min(activeRows.length-1, currentFloat + scrollVel * 16));
+    scrollVel *= 0.92;
+    momentumRAF = requestAnimationFrame(runMomentum);
   }
 
   const stage = document.getElementById('stage');
@@ -1098,25 +1124,35 @@ document.getElementById('btn-filter').addEventListener('click', () => {
 
   stage.addEventListener('touchstart', e => {
     cancelMomentum();
-    touchY    = e.touches[0].clientY;
-    touchTime = Date.now();
-    velY      = 0;
+    lastTouchY    = e.touches[0].clientY;
+    lastTouchTime = Date.now();
+    scrollVel     = 0;
+    dragging      = true;
     if (playing) { playing = false; updateBtn(); }
   }, { passive: true });
 
   stage.addEventListener('touchmove', e => {
     const y   = e.touches[0].clientY;
-    const dy  = touchY - y;         // 위로 밀면 양수 → 시간 증가(다음)
-    const dt  = Date.now() - touchTime || 1;
-    velY      = dy / dt;            // px/ms
-    applyDelta(dy);
-    touchY    = y;
-    touchTime = Date.now();
+    const dy  = lastTouchY - y;        // 손가락 위로 → 양수 → 다음
+    const dt  = Math.max(1, Date.now() - lastTouchTime);
+    scrollVel = (dy / LINE_H) / dt;    // 라인/ms
+    currentFloat = Math.max(0, Math.min(activeRows.length-1, currentFloat + dy / LINE_H));
+    lastTouchY    = y;
+    lastTouchTime = Date.now();
   }, { passive: true });
 
   stage.addEventListener('touchend', () => {
-    momentum = requestAnimationFrame(runMomentum);
+    dragging = false;
+    momentumRAF = requestAnimationFrame(runMomentum);
   }, { passive: true });
+
+  // 마우스 휠 지원 (PC)
+  stage.addEventListener('wheel', e => {
+    e.preventDefault();
+    cancelMomentum();
+    currentFloat = Math.max(0, Math.min(activeRows.length-1, currentFloat + e.deltaY / LINE_H));
+    snapToNearest();
+  }, { passive: false });
 })();
 
 // 키보드 방향키
