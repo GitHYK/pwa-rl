@@ -573,7 +573,7 @@ input[type=range]:active::-webkit-slider-thumb {
   <div class="logo-block">
     <div class="logo-line">
       <div class="logo-dash"></div>
-      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v18</div>
+      <div class="logo-sub">Script Synchronized Reader &nbsp;·&nbsp; v19</div>
       <div class="logo-dash"></div>
     </div>
     <div class="logo-title">Reading <em>Lines</em></div>
@@ -1036,31 +1036,59 @@ document.getElementById('btn-filter').addEventListener('click', () => {
   prevCurIdx = -1;
 });
 
-// 스와이프 제스처 (stage 영역)
+// 터치 연속 스크롤 (stage 영역)
 (function() {
+  let touchY     = 0;
+  let touchTime  = 0;
+  let velY       = 0;      // 속도 (px/ms)
+  let momentum   = null;   // 관성 RAF
+
+  function cancelMomentum() {
+    if (momentum) { cancelAnimationFrame(momentum); momentum = null; }
+  }
+
+  function applyDelta(dy) {
+    // 화면 높이 대비 스크롤 → 전체 시간 비율로 변환
+    const stageH  = document.getElementById('stage').offsetHeight || 400;
+    const ratio   = dy / stageH;          // -1 ~ 1
+    const dtSec   = ratio * totalDur * 0.18; // 감도 조절 (0.18)
+    curTime = Math.max(
+      activeRows.length ? activeRows[0].time : 0,
+      Math.min(curTime - dtSec, activeRows.length ? activeRows[activeRows.length-1].time + 4 : totalDur)
+    );
+    lastTs = performance.now();
+  }
+
+  function runMomentum() {
+    if (Math.abs(velY) < 0.05) { velY = 0; return; }
+    applyDelta(velY * 16);          // ~60fps frame
+    velY *= 0.88;                   // 마찰
+    momentum = requestAnimationFrame(runMomentum);
+  }
+
   const stage = document.getElementById('stage');
   if (!stage) return;
-  let startX = 0, startY = 0, startT = 0;
+
   stage.addEventListener('touchstart', e => {
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    startT = Date.now();
+    cancelMomentum();
+    touchY    = e.touches[0].clientY;
+    touchTime = Date.now();
+    velY      = 0;
+    if (playing) { playing = false; updateBtn(); }
   }, { passive: true });
-  stage.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - startX;
-    const dy = e.changedTouches[0].clientY - startY;
-    const dt = Date.now() - startT;
-    if (dt > 500) return; // 너무 느리면 무시
-    if (Math.abs(dx) < 40 && Math.abs(dy) < 40) return; // 너무 짧으면 무시
-    if (Math.abs(dy) > Math.abs(dx)) {
-      // 세로 스와이프
-      if (dy < -40) document.getElementById('btn-next').click(); // 위로 → 다음
-      else if (dy > 40) document.getElementById('btn-prev').click(); // 아래로 → 이전
-    } else {
-      // 가로 스와이프
-      if (dx < -40) document.getElementById('btn-next').click(); // 왼쪽 → 다음
-      else if (dx > 40) document.getElementById('btn-prev').click(); // 오른쪽 → 이전
-    }
+
+  stage.addEventListener('touchmove', e => {
+    const y   = e.touches[0].clientY;
+    const dy  = touchY - y;         // 위로 밀면 양수 → 시간 증가(다음)
+    const dt  = Date.now() - touchTime || 1;
+    velY      = dy / dt;            // px/ms
+    applyDelta(dy);
+    touchY    = y;
+    touchTime = Date.now();
+  }, { passive: true });
+
+  stage.addEventListener('touchend', () => {
+    momentum = requestAnimationFrame(runMomentum);
   }, { passive: true });
 })();
 
